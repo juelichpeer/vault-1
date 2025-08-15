@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>VAULT — Sign In</title>
+  <title>VAULT — Admin Dashboard</title>
   <style>
     :root {
       --bg: #0b0f16;
@@ -11,9 +11,7 @@
       --stroke: rgba(255,255,255,0.18);
       --text: #e7ebf3;
       --muted: #a8b0c0;
-      --accent: #caa66a; /* royal gold */
-      --danger: #ff6b6b;
-      --ok: #35d399;
+      --accent: #caa66a;
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
@@ -25,78 +23,102 @@
         radial-gradient(900px 600px at 120% 10%, #131a26 0%, transparent 60%),
         var(--bg);
     }
-    .wrap { min-height: 100%; display: grid; place-items: center; padding: 40px 16px; }
+    .shell { min-height: 100%; display: grid; grid-template-rows: auto 1fr; }
+    header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:16px 20px; border-bottom:1px solid var(--stroke);
+      backdrop-filter: blur(10px); background: rgba(255,255,255,0.04);
+    }
+    .brand { color: var(--accent); letter-spacing:.12em; text-transform:uppercase; font-weight:600; }
+    .pill { padding:6px 10px; border:1px solid var(--stroke); border-radius:999px; background:rgba(255,255,255,0.06); font-size:12px; }
+    main { padding: 24px; display:grid; gap:20px; grid-template-columns: repeat(auto-fit,minmax(320px,1fr)); }
     .card {
-      width: 100%; max-width: 520px; background: var(--card);
-      border: 1px solid var(--stroke); border-radius: 24px; padding: 28px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
-      backdrop-filter: blur(16px);
+      background: var(--card); border:1px solid var(--stroke);
+      border-radius:18px; padding:18px; backdrop-filter: blur(12px);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
     }
-    .logo { font-size: 22px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
-    h1 { margin: 6px 0 12px; font-size: 28px; }
-    p { opacity: 0.9; line-height: 1.5; }
-    .muted { color: var(--muted); }
-    form { display: grid; gap: 12px; margin-top: 12px; }
-    label { font-size: 13px; color: var(--muted); }
-    input {
-      width: 100%; padding: 12px 14px; border-radius: 14px;
-      border: 1px solid var(--stroke); background: rgba(255,255,255,0.03);
-      color: var(--text); outline: none;
-    }
+    h2 { margin: 0 0 10px; font-size: 18px; }
+    h3 { margin: 10px 0 8px; font-size: 14px; color: var(--muted); letter-spacing:.06em; text-transform: uppercase; }
     button {
-      padding: 12px 14px; border-radius: 14px; border: 1px solid var(--stroke);
+      padding:10px 12px; border-radius:12px; border:1px solid var(--stroke);
       background: linear-gradient(180deg, rgba(202,166,106,0.85), rgba(202,166,106,0.65));
-      color: #0b0f16; font-weight: 600; cursor: pointer;
+      color:#0b0f16; font-weight:600; cursor:pointer;
     }
-    .row { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
-    .note { font-size: 13px; }
-    .ok { color: var(--ok); }
-    .err { color: var(--danger); }
-    .hidden { display: none; }
-    .pill {
-      display:inline-block; padding:6px 10px; border-radius: 999px; border:1px solid var(--stroke);
-      background: rgba(255,255,255,0.06); font-size: 12px;
+    input, select {
+      padding:10px 12px; border-radius:12px; border:1px solid var(--stroke);
+      background: rgba(255,255,255,0.03); color: var(--text); width: 100%;
     }
+    .muted { color: var(--muted); }
+    .row { display:flex; gap:10px; align-items:center; }
+    .stack { display:grid; gap:10px; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
+  <div class="shell">
+    <header>
+      <div class="brand">VAULT</div>
       <div class="row">
-        <div class="logo">VAULT</div>
-        <div id="authState" class="pill">Signed out</div>
+        <span id="who" class="pill" data-test="current-email">…</span>
+        <span id="role" class="pill" data-test="current-role">role: …</span>
+        <button id="logoutBtn">Sign out</button>
       </div>
-      <h1>Sign in</h1>
-      <p class="muted">Admin uses email + password. Everyone else will get a magic link (invites coming next).</p>
+    </header>
 
-      <form id="loginForm" autocomplete="on">
-        <div>
-          <label for="email">Email</label>
-          <input id="email" type="email" placeholder="you@example.com" required />
+    <main>
+      <!-- SECTION A -->
+      <section class="card" id="section-owner-tools" data-test="section-owner-tools">
+        <h2>SECTION A — Owner Tools: Members & Roles</h2>
+        <p class="muted">Only the <strong>Owner</strong> can promote or demote users. (Server action coming next.)</p>
+
+        <h3>Target User Email</h3>
+        <div class="stack">
+          <input id="manageEmail" placeholder="user@example.com" data-test="manage-email" />
+          <div class="row">
+            <button id="makeAdminBtn" data-test="btn-make-admin">Make admin</button>
+            <button id="makeMemberBtn" data-test="btn-make-member">Make member</button>
+          </div>
+          <small class="muted">Note: UI-only right now; will connect to a secure Netlify Function with service_role.</small>
         </div>
-        <div>
-          <label for="password">Password</label>
-          <input id="password" type="password" placeholder="••••••••" required />
+      </section>
+
+      <!-- SECTION B -->
+      <section class="card" id="section-members-invites" data-test="section-members-invites">
+        <h2>SECTION B — Members & Invites (Magic Links)</h2>
+        <p class="muted">Invite users via magic link. Public sign-ups are disabled. (Feature coming next.)</p>
+        <div class="stack">
+          <input id="inviteEmail" placeholder="newuser@example.com" disabled data-test="invite-email" />
+          <button id="inviteBtn" disabled data-test="btn-invite">Invite user (magic link)</button>
         </div>
-        <button type="submit">Sign in</button>
-      </form>
+      </section>
 
-      <div id="status" class="note muted" style="margin-top:10px;">Ready</div>
+      <!-- SECTION C -->
+      <section class="card" id="section-documents" data-test="section-documents">
+        <h2>SECTION C — Documents: Buckets, Tags & Secure Shares</h2>
+        <p class="muted">Private buckets, per-user access, and temporary share links. (Coming soon.)</p>
+        <button disabled data-test="btn-open-docs">Open documents</button>
+      </section>
 
-      <div id="postLogin" class="hidden" style="margin-top:16px;">
-        <p class="note">You are signed in as <span id="who"></span>.</p>
-        <div class="row">
-          <span id="rolePill" class="pill">role: …</span>
-          <button id="logoutBtn" type="button">Sign out</button>
-        </div>
-      </div>
+      <!-- SECTION D -->
+      <section class="card" id="section-chats" data-test="section-chats">
+        <h2>SECTION D — Chats: Direct & Group</h2>
+        <p class="muted">Private DMs, group chats, and location tags. (Coming soon.)</p>
+        <button disabled data-test="btn-open-chats">Open chats</button>
+      </section>
 
-      <hr style="margin:20px 0; border: none; border-top: 1px solid var(--stroke);" />
-
-      <p class="muted">No account? <strong>Request access from the admin</strong>. Public sign-ups are disabled.</p>
-    </div>
+      <!-- SECTION E -->
+      <section class="card" id="section-activity" data-test="section-activity">
+        <h2>SECTION E — Activity & Notifications</h2>
+        <p class="muted">Login/logout and role-change requests are written to the audit log. Toasts show in real time.</p>
+        <button disabled data-test="btn-view-audit">View audit log (coming)</button>
+      </section>
+    </main>
   </div>
 
-  <script type="module" src="./main.js"></script>
+  <!-- Load order matters -->
+  <script type="module">
+    import { requireAdmin } from './authGuard.js';
+    import './dashboard.js'; // logic after guard passes
+    requireAdmin(); // Gate before anything else
+  </script>
 </body>
 </html>

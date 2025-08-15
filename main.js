@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient.js';
+import { toast } from './notify.js';
 
 const el = (id) => document.getElementById(id);
 const loginForm = el('loginForm');
@@ -10,6 +11,7 @@ const authState = el('authState');
 const rolePill = el('rolePill');
 
 function setStatus(msg, type = 'info') {
+  if (!statusEl) return;
   statusEl.textContent = msg;
   statusEl.classList.remove('ok', 'err');
   if (type === 'ok') statusEl.classList.add('ok');
@@ -17,50 +19,56 @@ function setStatus(msg, type = 'info') {
 }
 
 function showSignedOut() {
-  authState.textContent = 'Signed out';
-  loginForm.classList.remove('hidden');
-  postLogin.classList.add('hidden');
+  if (authState) authState.textContent = 'Signed out';
+  loginForm?.classList.remove('hidden');
+  postLogin?.classList.add('hidden');
 }
 
 function showSignedIn(email, role = 'member') {
-  authState.textContent = 'Signed in';
-  who.textContent = email || 'unknown';
-  rolePill.textContent = `role: ${role}`;
-  loginForm.classList.add('hidden');
-  postLogin.classList.remove('hidden');
+  if (authState) authState.textContent = 'Signed in';
+  if (who) who.textContent = email || 'unknown';
+  if (rolePill) rolePill.textContent = `role: ${role}`;
+  loginForm?.classList.add('hidden');
+  postLogin?.classList.remove('hidden');
 }
 
-/** Fetch role from profiles */
 async function fetchRole(userId) {
   const { data, error } = await supabase
     .from('profiles')
     .select('role, email')
     .eq('id', userId)
     .maybeSingle();
-
-  if (error) {
-    console.warn('profile error', error);
-    return { role: 'member', email: null };
-  }
+  if (error) return { role: 'member', email: null };
   return { role: data?.role ?? 'member', email: data?.email ?? null };
 }
 
-/** On load: restore session */
-(async () => {
-  setStatus('Checking session…');
+async function logEvent(event_type, details = {}) {
   const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return;
+  await supabase.from('audit_log').insert({
+    user_id: session.user.id,
+    event_type,
+    details
+  });
+}
 
+// On load: if already signed in and owner/admin -> go to dashboard
+(async () => {
+  const { data: { session } } = await supabase.auth.getSession();
   if (session?.user) {
     const { role, email } = await fetchRole(session.user.id);
+    if (role === 'admin' || role === 'owner') {
+      window.location.href = 'dashboard.html';
+      return;
+    }
     showSignedIn(email || session.user.email, role);
-    setStatus('Session restored', 'ok');
+    setStatus('Signed in', 'ok');
   } else {
     showSignedOut();
     setStatus('Ready');
   }
 })();
 
-/** Login submit (admin email+password) */
 loginForm?.addEventListener('submit', async (e) => {
   e.preventDefault();
   setStatus('Signing in…');
@@ -69,40 +77,42 @@ loginForm?.addEventListener('submit', async (e) => {
   const password = el('password').value;
 
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
   if (error) {
     setStatus(error.message || 'Login failed', 'err');
+    toast('Login failed', 'err');
     return;
   }
 
-  // Get role and show state
   const user = data.user;
   const { role } = await fetchRole(user.id);
-
-  // For now: only allow admin to proceed (members will use magic links later)
-  if (role !== 'admin') {
+  if (!['admin','owner'].includes(role)) {
     await supabase.auth.signOut();
-    setStatus('Access denied. Ask admin for an invite (magic link).', 'err');
+    setStatus('Access denied. Ask admin for invite (magic link).', 'err');
+    toast('Access denied', 'err');
     showSignedOut();
     return;
   }
 
-  showSignedIn(email, role);
-  setStatus('Signed in as admin', 'ok');
+  await logEvent('login', { method: 'password' });
+  toast('Welcome back', 'ok');
+  window.location.href = 'dashboard.html';
 });
 
-/** Logout */
 logoutBtn?.addEventListener('click', async () => {
+  await logEvent('logout', {});
   await supabase.auth.signOut();
+  toast('Signed out', 'ok');
   showSignedOut();
-  setStatus('Signed out', 'ok');
 });
 
-/** Listen to auth changes (keeps UI in sync) */
 supabase.auth.onAuthStateChange(async (_event, session) => {
   if (session?.user) {
     const { role, email } = await fetchRole(session.user.id);
-    showSignedIn(email || session.user.email, role);
+    if (role === 'admin' || role === 'owner') {
+      window.location.href = 'dashboard.html';
+    } else {
+      showSignedIn(email || session.user.email, role);
+    }
   } else {
     showSignedOut();
   }
