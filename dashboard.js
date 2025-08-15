@@ -11,35 +11,47 @@ const makeAdminBtn = document.getElementById('makeAdminBtn');
 const makeMemberBtn = document.getElementById('makeMemberBtn');
 const manageEmail = document.getElementById('manageEmail');
 
-(async () => {
-  const me = await requireAdmin(); // allows admin or owner (guard handles non-admins)
-  if (!me) return;
+const navButtons = document.querySelectorAll('[data-target]');
+navButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const id = btn.getAttribute('data-target');
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
 
-  // Owner gets the role controls; admins see them disabled
-  const owner = me.role === 'owner';
-  if (!owner) {
-    makeAdminBtn?.setAttribute('disabled', 'true');
-    makeMemberBtn?.setAttribute('disabled', 'true');
-    manageEmail?.setAttribute('disabled', 'true');
-  }
+document.addEventListener('DOMContentLoaded', init);
+
+async function init() {
+  const me = await requireAdmin(); // kicks out non-admins
+  if (!me) return;
 
   who.textContent = me.email;
   role.textContent = `role: ${me.role}`;
-})();
 
-logoutBtn?.addEventListener('click', async () => {
-  await supabase.auth.signOut();
-  toast('Signed out', 'ok');
-  window.location.href = 'index.html';
-});
+  // Only OWNER can use role buttons
+  const owner = me.role === 'owner';
+  [makeAdminBtn, makeMemberBtn, manageEmail].forEach(el => {
+    if (!owner) el?.setAttribute('disabled','true');
+  });
 
-// TEMP (UI-only): Record intent to change roles; real change will be a Netlify Function with service_role
+  logoutBtn?.addEventListener('click', async () => {
+    try {
+      await supabase.from('audit_log').insert({
+        user_id: me.userId, event_type: 'logout', details: {}
+      });
+    } catch {}
+    await supabase.auth.signOut();
+    toast('Signed out', 'ok');
+    window.location.href = 'index.html';
+  });
+
+  makeAdminBtn?.addEventListener('click', () => pretendRoleChange('admin'));
+  makeMemberBtn?.addEventListener('click', () => pretendRoleChange('member'));
+}
+
 async function pretendRoleChange(newRole) {
   const email = manageEmail?.value.trim();
-  if (!email) {
-    toast('Enter an email first', 'err');
-    return;
-  }
+  if (!email) return toast('Enter an email first', 'err');
   const { data: { session } } = await supabase.auth.getSession();
   if (session?.user) {
     await supabase.from('audit_log').insert({
@@ -48,8 +60,5 @@ async function pretendRoleChange(newRole) {
       details: { target_email: email, new_role: newRole }
     });
   }
-  toast(`Requested role change: ${email} → ${newRole}`, 'ok');
+  toast(`Requested: ${email} → ${newRole}`, 'ok');
 }
-
-makeAdminBtn?.addEventListener('click', () => pretendRoleChange('admin'));
-makeMemberBtn?.addEventListener('click', () => pretendRoleChange('member'));
