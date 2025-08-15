@@ -27,7 +27,6 @@ async function getSession() {
   const { data: { session } } = await supabase.auth.getSession();
   return session ?? null;
 }
-
 async function getMyProfile(userId) {
   const { data, error } = await supabase
     .from('profiles')
@@ -37,36 +36,29 @@ async function getMyProfile(userId) {
   if (error || !data) return { email: null, role: 'member' };
   return data;
 }
-
-function requireOwnerOrAdmin(role) {
-  return role === 'owner' || role === 'admin';
-}
+const isOwnerOrAdmin = (r) => r === 'owner' || r === 'admin';
 
 // --- init ---
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
-  // Guard: must be signed in
   const session = await getSession();
   if (!session?.user) {
     window.location.href = 'index.html';
     return;
   }
 
-  // Guard: must be owner/admin
   const me = await getMyProfile(session.user.id);
-  if (!requireOwnerOrAdmin(me.role)) {
-    // Kick out hard if someone guesses the URL
+  if (!isOwnerOrAdmin(me.role)) {
     await supabase.auth.signOut();
     window.location.href = 'index.html';
     return;
   }
 
-  // Populate header
   who.textContent = me.email ?? 'unknown';
   roleEl.textContent = `role: ${me.role}`;
 
-  // Only OWNER can use role-change UI
+  // Only OWNER gets active role-change controls in UI
   const isOwner = me.role === 'owner';
   [makeAdminBtn, makeMemberBtn, manageEmail].forEach((el) => {
     if (!isOwner) el?.setAttribute('disabled', 'true');
@@ -80,33 +72,60 @@ async function init() {
         event_type: 'logout',
         details: {}
       });
-    } catch (_) {
-      // ignore audit failures
-    }
+    } catch {}
     await supabase.auth.signOut();
-    localStorage.removeItem('vault-webauthn-id'); // clear device lock key
+    localStorage.removeItem('vault-webauthn-id');
     toast('Signed out', 'ok');
     window.location.href = 'index.html';
   });
 
-  // TEMP owner-tools: record intent only (secure server action comes later)
-  makeAdminBtn?.addEventListener('click', () => pretendRoleChange('admin', session.user.id));
-  makeMemberBtn?.addEventListener('click', () => pretendRoleChange('member', session.user.id));
+  // Owner role changes (now LIVE via Netlify Function)
+  makeAdminBtn?.addEventListener('click', () => setRole('admin'));
+  makeMemberBtn?.addEventListener('click', () => setRole('member'));
 }
 
-async function pretendRoleChange(newRole, actorUserId) {
+async function setRole(newRole) {
   const targetEmail = manageEmail?.value.trim();
   if (!targetEmail) return toast('Enter an email first', 'err');
 
+  // Get caller token for the function
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) {
+    toast('Not authenticated', 'err');
+    window.location.href = 'index.html';
+    return;
+  }
+
+  // Disable buttons while processing
+  const prevAdminDisabled = makeAdminBtn.disabled;
+  const prevMemberDisabled = makeMemberBtn.disabled;
+  makeAdminBtn.disabled = true;
+  makeMemberBtn.disabled = true;
+
   try {
-    await supabase.from('audit_log').insert({
-      user_id: actorUserId,
-      event_type: 'role_change_requested',
-      details: { target_email: targetEmail, new_role: newRole }
+    const res = await fetch('/.netlify/functions/set-role', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ targetEmail, newRole }),
     });
-    toast(`Requested: ${targetEmail} → ${newRole}`, 'ok');
+
+    const body = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      toast(body?.error || 'Role update failed', 'err');
+      return;
+    }
+
+    toast(`Role updated: ${targetEmail} → ${newRole}`, 'ok');
   } catch (e) {
-    toast('Could not log request', 'err');
-    console.warn(e);
+    console.error(e);
+    toast('Network or server error', 'err');
+  } finally {
+    makeAdminBtn.disabled = prevAdminDisabled;
+    makeMemberBtn.disabled = prevMemberDisabled;
   }
 }
